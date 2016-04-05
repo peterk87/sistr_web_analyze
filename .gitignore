@@ -1,0 +1,5 @@
+*.pyc
+.idea/
+*.json
+*.pickle
+.ipynb_checkpoints/
