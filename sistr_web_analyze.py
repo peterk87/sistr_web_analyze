@@ -36,15 +36,27 @@ parser.add_argument('-p', '--sistr-password',
                     help='SISTR user password (required for registered users)')
 parser.add_argument('--sistr-api-url',
                     help='SISTR base HTTP API URL (default=lfz.corefacility.ca/sistr-wtf/api/)')
+parser.add_argument('--timeout',
+                    type=int,
+                    default=600,
+                    help="SISTR HTTP API request timeout (default=600 or 10min)")
 parser.add_argument('-v', '--verbose',
                     action='count',
                     default=2,
                     help='Logging verbosity level (-v == show warnings; -vvv == show debug info)')
 
 
-def create_new_temp_user():
+def create_new_temp_user(timeout):
+    """Create a new temporary anonymous user
+
+    Args:
+        timeout (int): SISTR API HTTP request timeout
+
+    Returns:
+        (str, dict): Tuple of username string and dict of user info
+    """
     logging.info('Creating new anonymous user on SISTR server')
-    r = requests.post(BASE_SISTR_URL + 'user/sistr')
+    r = requests.post(BASE_SISTR_URL + 'user/sistr', timeout=timeout)
     assert isinstance(r, requests.Response)
     if r.status_code == 201:
         user_info = r.json()
@@ -59,16 +71,20 @@ def create_new_temp_user():
         raise Exception(err_msg)
 
 
-def get_registered_user_info(username, password):
+def get_registered_user_info(username, password, timeout):
     """Get registered SISTR user info
 
     Args:
         username (str): User name
         password (str): Password
+        timeout (int): SISTR API HTTP request timeout
+
+    Returns:
+        (str, dict): Tuple of username string and dict of user info
     """
     logging.info('Trying to get registered user info for "{}"'.format(username))
     r = requests.get('{}user/{}'.format(BASE_SISTR_URL, username),
-                             auth=(username, password))
+                             auth=(username, password), timeout=timeout)
     assert isinstance(r, requests.Response)
     if r.status_code == 200:
         user_info = r.json()
@@ -87,9 +103,21 @@ def get_registered_user_info(username, password):
         raise Exception(err_msg)
 
 
-def get_temp_user_info(username):
+def get_temp_user_info(username, timeout):
+    """Get temporary anonymous SISTR user info
+
+    Note:
+        Temporary users are deleted from SISTR after 2 weeks of inactivity.
+
+    Args:
+        password (str): Password
+        timeout (int): SISTR API HTTP request timeout
+
+    Returns:
+        (str, dict): Tuple of username string and dict of user info
+    """
     logging.info('Trying to get temporary user info for "{}"'.format(username))
-    r = requests.get('{}user/{}'.format(BASE_SISTR_URL, username))
+    r = requests.get('{}user/{}'.format(BASE_SISTR_URL, username), timeout=timeout)
     assert isinstance(r, requests.Response)
     if r.status_code == 200:
         user_info = r.json()
@@ -105,25 +133,42 @@ def get_temp_user_info(username):
         raise Exception(err_msg)
 
 
-def get_user_info(username, password):
+def get_user_info(username, password, timeout):
+    """Get SISTR user info
+
+    Get user info for a registered user, temporary user or create a new temporary user depending on whether a username
+    and password are specified.
+
+    Args:
+        username (str or None): User name
+        password (str or None): Password
+        timeout (int): SISTR API HTTP request timeout
+
+    Returns:
+        (str, dict): Tuple of username string and dict of user info
+    """
     if username is None:
-        return create_new_temp_user()
+        return create_new_temp_user(timeout)
     else:
         if password is not None:
-            return get_registered_user_info(username, password)
+            return get_registered_user_info(username, password, timeout)
         else:
-            return get_temp_user_info(username)
+            return get_temp_user_info(username, timeout)
 
 
 if __name__ == '__main__':
     args = parser.parse_args()
     init_console_logger(args.verbose)
 
+    timeout = args.timeout
+
     logging.debug('argparse args: %s', args)
 
     if args.sistr_api_url:
         logging.info('Using user specified SISTR base API URL %s', args.sistr_api_url)
         BASE_SISTR_URL = args.sistr_api_url
+
+    # Get input fasta file handle and get/infer the genome name
 
     input_fasta = args.input_fasta
     assert isinstance(input_fasta, file)
@@ -147,7 +192,7 @@ if __name__ == '__main__':
         logging.info('Genome name is "%s" as specified by user', genome_name)
 
     # TODO: registered user requests need Basic HTTP Auth preferably with SISTR provided auth token
-    username, user_info = get_user_info(args.sistr_user, args.sistr_password)
+    username, user_info = get_user_info(args.sistr_user, args.sistr_password, timeout)
 
     # Output data
     mist_results_json = None
@@ -155,7 +200,9 @@ if __name__ == '__main__':
     sistr_genome_name = genome_name
 
     post_files = {'fasta': input_fasta}
-    genome_post_resp = requests.post('{}user/{}/genome/{}'.format(BASE_SISTR_URL, username, genome_name), files=post_files)
+    genome_post_resp = requests.post('{}user/{}/genome/{}'.format(BASE_SISTR_URL, username, genome_name),
+                                     files=post_files,
+                                     timeout=timeout)
     if genome_post_resp.status_code == 201:
         logging.debug('Successfully created genome resource and started genome analysis on SISTR server')
     else:
@@ -172,7 +219,7 @@ if __name__ == '__main__':
         logging.info('Waiting for %s seconds before polling SISTR for progress', TASK_POLL_SLEEP_TIME)
         sleep(TASK_POLL_SLEEP_TIME)
         logging.info('Waited %s seconds. Checking task %s status...', TASK_POLL_SLEEP_TIME, task_id)
-        task_poll_resp = requests.get(BASE_SISTR_URL + 'task', params={'task_id': task_id})
+        task_poll_resp = requests.get(BASE_SISTR_URL + 'task', params={'task_id': task_id}, timeout=timeout)
         task_poll_json = task_poll_resp.json()
         # SISTR returns list of analysis task results since multiple task ids could be checked at the same time
         # get first analysis task progress result
@@ -191,13 +238,15 @@ if __name__ == '__main__':
             logging.info('SISTR genome analysis progress %s percent: %s', task_info['info']['progress'], task_info['info']['desc'])
 
     logging.info('Getting serovar prediction results for genome "%s"', genome_name)
-    serovar_prediction_resp = requests.get('{}user/{}/genome/{}/serovar_prediction'.format(BASE_SISTR_URL, username, sistr_genome_name))
+    serovar_prediction_resp = requests.get('{}user/{}/genome/{}/serovar_prediction'.format(BASE_SISTR_URL, username, sistr_genome_name),
+                                           timeout=timeout)
     serovar_prediction_json = serovar_prediction_resp.json()
 
     logging.debug('Serovar prediction results: %s', serovar_prediction_json)
     logging.info('Serovar prediction = "%s"', serovar_prediction_json['serovar_prediction'])
 
-    mist_results_resp = requests.get('{}user/{}/genome/{}/mist_results'.format(BASE_SISTR_URL, username, sistr_genome_name))
+    mist_results_resp = requests.get('{}user/{}/genome/{}/mist_results'.format(BASE_SISTR_URL, username, sistr_genome_name),
+                                     timeout=timeout)
     mist_results_json = mist_results_resp.json()
 
     logging.debug('In silico typing results: %s', mist_results_json)

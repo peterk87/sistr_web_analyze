@@ -1,0 +1,55 @@
+<tool id="sistr_web_analyze" name="SISTR Web Analyze" version="0.1.0">
+    <description>
+        SISTR analysis of genome assembly
+    </description>
+    <requirements>
+        <requirement type="package" version="1.0">sistr_web_analyze_python_modules</requirement>
+    </requirements>
+    <stdio>
+        <exit_code range="1:" />
+    </stdio>
+    <command interpreter="python">
+      sistr_web_analyze.py -i $input -o $output --output-format json --sistr-api-url $sistr_api_url --genome-name $genome_name --timeout $timeout
+    </command>
+    <inputs>
+        <param type="data"
+               name="input"
+               format="fasta"
+               label="Input genome assembly FASTA file"
+               argument="--input"
+                />
+        <param name="genome_name"
+               type="text"
+               value="galaxy_genome"
+               argument="--genome-name"
+               label="Genome name in SISTR"
+                />
+        <param name="sistr_api_url"
+               type="text"
+               value="https://lfz.corefacility.ca/sistr-wtf/api/"
+               label="SISTR base HTTP API URL"
+               argument="sistr-api-url"
+                />
+        <param name="timeout"
+               type="integer"
+               min="30"
+               value="600"
+               label="SISTR HTTP request timeout"
+               argument="--timeout"
+                />
+    </inputs>
+    <outputs>
+        <data format="json" name="output" />
+    </outputs>
+    <help>
+Perform SISTR web analysis of a genome assembly
+-----------------------------------------------
+
+Submit a genome assembly to SISTR for *in silico* typing and serovar prediction analysis and retrieve results on completion.
+
+</help>
+ <citations>
+    <!-- Citation for SISTR PLOS ONE paper -->
+    <citation type="doi">10.1371/journal.pone.0147101</citation>
+  </citations>
+</tool>
