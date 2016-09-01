@@ -62,3 +62,10 @@ optional arguments:
   -v, --verbose         Logging verbosity level (-v == show warnings; -vvv ==
                         show debug info)
 ```
+
+License
+=======
+
+Copyright 2016 Public Health Agency of Canada
+
+Distributed under Apache License Version 2.0

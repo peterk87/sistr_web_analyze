@@ -3,7 +3,7 @@
   <package name="sistr_web_analyze_python_modules" version="1.0">
       <install version="1.0">
           <actions>
-              <action type="setup_virtualenv">git+https://github.com/peterk87/sistr_web_analyze.git@master</action>
+              <action type="setup_virtualenv"/>
           </actions>
       </install>
       <readme></readme>
